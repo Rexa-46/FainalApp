@@ -22,6 +22,7 @@ import { Capacitor, CapacitorHttp } from "@capacitor/core";
 import { App as CapacitorApp } from "@capacitor/app";
 import { Filesystem, Directory, Encoding } from "@capacitor/filesystem";
 import { Share } from "@capacitor/share";
+import { Browser } from "@capacitor/browser";
 import { BiometricAuth } from "@aparajita/capacitor-biometric-auth";
 import { SpeechRecognition } from "@capgo/capacitor-speech-recognition";
 import { TextToSpeech } from "@capacitor-community/text-to-speech";
@@ -1204,6 +1205,12 @@ function syncErrorText(e) {
   if (e?.status === 409 || e?.status === 422) return "تعارض در ذخیره؛ دوباره تلاش کنید.";
   if (/network|failed to fetch|timeout|load failed/i.test(m)) return "اتصال اینترنت برقرار نیست.";
   return `خطا: ${m.slice(0, 120)}`;
+}
+// باز کردن لینک دانلود در مرورگر گوشی (داخل WebView برنامه، window.open کاری نمی‌کند)
+async function openExternalUrl(url) {
+  if (!url) return;
+  try { if (Capacitor.isNativePlatform()) { await Browser.open({ url }); return; } } catch {}
+  try { window.location.href = url; } catch {}
 }
 let _updErr = "";
 async function rawGet(url, accept) {
@@ -2519,7 +2526,7 @@ export default function App() {
             {updateInfo && (
               <div style={{ background: "#e8f7ee", color: "#17603a", border: "1px solid #9fd8b4", borderRadius: 10, padding: "9px 12px", fontSize: 12.5, fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={{ flex: 1, lineHeight: 1.8 }}>نسخه‌ی جدید Rexa آماده است ({updateInfo.name}).</span>
-                <button onClick={() => { try { window.open(updateInfo.url, "_blank"); } catch {} }} style={{ background: "#17603a", color: "#fff", border: "none", borderRadius: 8, padding: "6px 12px", fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>دانلود</button>
+                <button onClick={() => openExternalUrl(updateInfo.url)} style={{ background: "#17603a", color: "#fff", border: "none", borderRadius: 8, padding: "6px 12px", fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>دانلود</button>
                 <button onClick={() => setUpdateInfo(null)} aria-label="بستن" style={{ background: "none", border: "none", color: "#17603a", cursor: "pointer", display: "flex" }}><X size={16} /></button>
               </div>
             )}
@@ -5698,7 +5705,7 @@ function AboutView({ updateInfo, updateMsg, checkUpdateNow }) {
     {Capacitor.isNativePlatform() && APP_REPO && <>
       <button onClick={() => checkUpdateNow?.(true)} style={st.primaryBtn}>بررسی به‌روزرسانی</button>
       {updateMsg && <div style={{ marginTop: 10, fontSize: 12.5, fontWeight: 700, color: BRAND.darkgreen }}>{updateMsg}</div>}
-      {updateInfo && <button onClick={() => { try { window.open(updateInfo.url, "_blank"); } catch {} }} style={{ ...st.primaryBtn, marginTop: 10, background: BRAND.green }}>دانلود نسخه‌ی {updateInfo.name}</button>}
+      {updateInfo && <button onClick={() => openExternalUrl(updateInfo.url)} style={{ ...st.primaryBtn, marginTop: 10, background: BRAND.green }}>دانلود نسخه‌ی {updateInfo.name}</button>}
     </>}
   </div></div>;
 }
