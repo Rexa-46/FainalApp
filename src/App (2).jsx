@@ -1066,38 +1066,55 @@ function BottomNav({ active, setActive, onAdd, hidden = false }) {
     window.visualViewport?.addEventListener("resize", upd);
     return () => { window.removeEventListener("resize", upd); window.visualViewport?.removeEventListener("resize", upd); };
   }, []);
-  // ترتیب از چپ به راست: گزارش‌ها، تراکنش‌ها، (ثبت سریع)، چک‌ها، خانه — بدون کادر؛ آیکن‌های بزرگ و رنگی
+  // ترتیب از چپ به راست: گزارش‌ها، تراکنش‌ها، (ثبت سریع)، چک‌ها، خانه — بدون هیچ کادر؛ آیکن‌های سه‌بعدی
   const items = [
-    { key: "reports", label: "گزارش‌ها", icon: PieChartIcon, accent: "#8b5cf6" },
-    { key: "transactions", label: "تراکنش‌ها", icon: Receipt, accent: "#2f7de1" },
-    { key: "__add", label: "ثبت سریع", accent: "#ef4f7a" },
-    { key: "checks", label: "چک‌ها", icon: FileSpreadsheet, accent: "#f59e0b" },
-    { key: "home", label: "خانه", icon: HomeIcon, accent: "#10b981" },
+    { key: "reports", label: "گزارش‌ها", icon: PieChartIcon },
+    { key: "transactions", label: "تراکنش‌ها", icon: Receipt },
+    { key: "__add", label: "ثبت سریع", icon: Repeat },
+    { key: "checks", label: "چک‌ها", icon: FileSpreadsheet },
+    { key: "home", label: "خانه", icon: HomeIcon },
   ];
   if (hidden) return null;
-  const add = items[2];
   return (
-    <div dir="ltr" style={{ position: "fixed", left: 0, right: 0, bottom: 0, maxWidth: 480, margin: "0 auto", zIndex: 300, background: t.bg, transform: kbShift ? `translateY(${kbShift}px)` : "none", pointerEvents: kbShift ? "none" : "auto", display: "grid", gridTemplateColumns: "repeat(5, 1fr)", alignItems: "center", padding: "6px calc(4px + env(safe-area-inset-right, 0px)) calc(8px + env(safe-area-inset-bottom, 0px)) calc(4px + env(safe-area-inset-left, 0px))" }}>
-      {items.map((it) => it.key === "__add" ? (
-        <button key={it.key} onClick={onAdd} aria-label={it.label} style={{ ...NAV_BTN_RESET, color: dark ? "#ff8fb0" : add.accent }}>
-          <Repeat size={40} strokeWidth={2.6} style={{ filter: `drop-shadow(0 3px 6px ${add.accent}66)` }} />
-          <span style={{ fontSize: 11, fontWeight: 800 }}>{it.label}</span>
-        </button>
-      ) : <NavBtn key={it.key} it={it} active={active} setActive={setActive} />)}
+    <div dir="ltr" style={{ position: "fixed", left: 0, right: 0, bottom: 0, maxWidth: 480, margin: "0 auto", zIndex: 300, background: `linear-gradient(to top, ${t.bg} 80%, transparent)`, border: "none", boxShadow: "none", transform: kbShift ? `translateY(${kbShift}px)` : "none", pointerEvents: kbShift ? "none" : "auto", display: "grid", gridTemplateColumns: "repeat(5, 1fr)", alignItems: "end", padding: "18px calc(4px + env(safe-area-inset-right, 0px)) calc(6px + env(safe-area-inset-bottom, 0px)) calc(4px + env(safe-area-inset-left, 0px))" }}>
+      <svg width="0" height="0" style={{ position: "absolute" }} aria-hidden="true">
+        <defs>
+          {Object.entries(NAV3D).map(([k, c]) => (
+            <linearGradient key={k} id={`nav3d-${k}`} gradientUnits="userSpaceOnUse" x1="4" y1="0" x2="20" y2="24">
+              <stop offset="0" stopColor={c.c1} /><stop offset="1" stopColor={c.c2} />
+            </linearGradient>
+          ))}
+        </defs>
+      </svg>
+      {items.map((it) => <NavBtn key={it.key} it={it} isActive={it.key !== "__add" && active === it.key} onClick={it.key === "__add" ? onAdd : () => setActive(it.key)} dark={dark} />)}
     </div>
   );
 }
-const NAV_BTN_RESET = { background: "none", border: "none", outline: "none", boxShadow: "none", WebkitTapHighlightColor: "transparent", appearance: "none", WebkitAppearance: "none", padding: 0, height: 62, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, cursor: "pointer", fontFamily: "inherit" };
-function NavBtn({ it, active, setActive }) {
-  const t = useT();
-  const dark = t.card === THEME.dark.card;
-  const Icon = it.icon; const isActive = active === it.key;
-  const base = it.accent;
-  const color = isActive ? base : (dark ? `${base}cc` : `${base}b3`);
+// رنگ هر آیکن سه‌بعدی: روشن، تیره، و رنگ ضخامت (عمق)
+const NAV3D = {
+  reports: { c1: "#c4a6ff", c2: "#7c3aed", side: "#4c1d95" },
+  transactions: { c1: "#7cc0ff", c2: "#1d6fd8", side: "#12408a" },
+  __add: { c1: "#ff9db9", c2: "#e11d5a", side: "#8f0f3a" },
+  checks: { c1: "#ffd77a", c2: "#f59e0b", side: "#98590a" },
+  home: { c1: "#7ee8c0", c2: "#059669", side: "#065f46" },
+};
+const NAV_BTN_RESET = { background: "none", border: "none", outline: "none", boxShadow: "none", WebkitTapHighlightColor: "transparent", appearance: "none", WebkitAppearance: "none", padding: 0, margin: 0, height: 66, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", gap: 2, cursor: "pointer", fontFamily: "inherit", userSelect: "none" };
+function NavBtn({ it, isActive, onClick, dark }) {
+  const Icon = it.icon; const c = NAV3D[it.key];
+  const big = it.key === "__add";
+  const size = big ? 40 : isActive ? 35 : 31;
+  const depth = isActive || big ? 5 : 3;
+  const g = `url(#nav3d-${it.key})`;
+  const common = { size, strokeWidth: big ? 2.6 : 2.3, strokeLinecap: "round", strokeLinejoin: "round" };
   return (
-    <button onClick={() => setActive(it.key)} aria-label={it.label} style={{ ...NAV_BTN_RESET, color, transform: isActive ? "translateY(-2px)" : "none", transition: "transform .18s ease" }}>
-      <Icon size={isActive ? 34 : 30} strokeWidth={isActive ? 2.3 : 2} fill="currentColor" fillOpacity={isActive ? 0.28 : 0.14} style={{ filter: isActive ? `drop-shadow(0 3px 6px ${base}66)` : "none", transition: "all .18s ease" }} />
-      <span style={{ fontSize: 11, fontWeight: isActive ? 800 : 600, color: isActive ? base : (dark ? "#b7c0d6" : "#5b6785") }}>{it.label}</span>
+    <button onClick={onClick} aria-label={it.label} style={{ ...NAV_BTN_RESET, opacity: isActive || big || true ? 1 : 1 }}>
+      <span style={{ position: "relative", width: size, height: size + depth, display: "block", transform: `perspective(260px) rotateX(${isActive || big ? 14 : 9}deg) translateY(${isActive ? -4 : 0}px)`, transformOrigin: "50% 100%", transition: "transform .2s ease", filter: `drop-shadow(0 ${isActive || big ? 7 : 4}px ${isActive || big ? 7 : 4}px rgba(0,0,0,${dark ? 0.55 : 0.28}))`, opacity: isActive || big ? 1 : 0.88 }}>
+        {Array.from({ length: depth }, (_, i) => depth - i).map((d) => (
+          <Icon key={d} {...common} color={c.side} fill={c.side} fillOpacity={0.9} style={{ position: "absolute", left: 0, top: d }} />
+        ))}
+        <Icon {...common} color={g} stroke={g} fill={g} fillOpacity={0.32} style={{ position: "absolute", left: 0, top: 0 }} />
+      </span>
+      <span style={{ fontSize: 11, fontWeight: isActive ? 800 : 600, marginTop: 2, color: isActive ? c.c2 : (dark ? "#b7c0d6" : "#5b6785") }}>{it.label}</span>
     </button>
   );
 }
