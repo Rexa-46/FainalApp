@@ -110,6 +110,9 @@ jobs:
           echo "Using the fixed signing key from the DEBUG_KEYSTORE_BASE64 secret."
           keytool -list -v -keystore ~/.android/debug.keystore -storepass android | grep -E "Alias name|SHA256"
 
+      - name: Force Gradle to sign with the fixed key
+        run: node scripts/patch-android-signing.mjs
+
       - name: Build debug APK
         working-directory: android
         run: chmod +x ./gradlew && ./gradlew assembleDebug --no-daemon --stacktrace
@@ -117,7 +120,16 @@ jobs:
       - name: Show the APK signing fingerprint (must be identical in every build)
         run: |
           APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
-          "$APKSIGNER" verify --print-certs android/app/build/outputs/apk/debug/app-debug.apk | grep -E "SHA-256|Signer"
+          OUT=$("$APKSIGNER" verify --print-certs android/app/build/outputs/apk/debug/app-debug.apk)
+          echo "$OUT" | grep -E "SHA-256|Signer"
+          APK_FP=$(echo "$OUT" | grep -m1 "SHA-256 digest" | sed 's/.*: //' | tr -d ': ' | tr 'A-Z' 'a-z')
+          KS_FP=$(keytool -list -v -keystore ~/.android/debug.keystore -storepass android | grep -m1 "SHA256:" | sed 's/.*SHA256: //' | tr -d ': ' | tr 'A-Z' 'a-z')
+          echo "APK fingerprint:      $APK_FP"
+          echo "Expected fingerprint: $KS_FP"
+          if [ "$APK_FP" != "$KS_FP" ]; then
+            echo "::error::The APK is NOT signed with the fixed key; it would not install over the previous version."
+            exit 1
+          fi
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
