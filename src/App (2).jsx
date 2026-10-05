@@ -4246,19 +4246,102 @@ function ChecksManager({ checks, setChecks }) {
 /* ---------------------------------------------------------
    Loans Manager
 --------------------------------------------------------- */
-function LoansManager({ loans, setLoans }) {
+function LoansManager({ loans, setLoans, categories = [] }) {
   const st = useStyles();
-  const [form, setForm] = useState({ title: "", principal: "", installments: "", monthlyPayment: "", startDate: todayISO(), spent: false });
-  function add() {
-    if (!form.title || !form.principal || !form.installments || !form.monthlyPayment) return;
-    setLoans((p) => [...p, { id: uid(), title: form.title, principal: Number(form.principal), installments: Number(form.installments), monthlyPayment: Number(form.monthlyPayment), startDate: form.startDate, paidCount: 0, spent: !!form.spent }]);
-    setForm({ title: "", principal: "", installments: "", monthlyPayment: "", startDate: todayISO(), spent: false });
+  const t = useT();
+  const [form, setForm] = useState({ title: "", principal: "", installments: "", monthlyPayment: "", startDate: todayISO(), spent: false, accountId: "" });
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState(null);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [editAccountOpen, setEditAccountOpen] = useState(false);
+
+  // «از حساب» در وام از همان درخت «حساب‌ها» می‌آید، اما بانک‌ها و حساب‌های
+  // دوطرفه (بدهکار + بستانکار) اجازه انتخاب دارند. سایر حساب‌ها
+  // برای شفافیت نمایش داده می‌شوند ولی غیرفعال هستند.
+  const eligibleAccounts = categories.filter((c) => c.kind === "bank" || c.twoWay === true);
+  const allAccounts = [...categories].sort((a, b) => accountPath(categories, a).join(" / ").localeCompare(accountPath(categories, b).join(" / "), "fa"));
+  const accountName = (id) => {
+    const c = categories.find((x) => x.id === id);
+    return c ? accountPath(categories, c).join(" / ") : "انتخاب نشده";
+  };
+  const isEligibleAccount = (id) => eligibleAccounts.some((a) => a.id === id);
+
+  function resetForm() {
+    setForm({ title: "", principal: "", installments: "", monthlyPayment: "", startDate: todayISO(), spent: false, accountId: "" });
   }
+
+  function add() {
+    const installments = Number(form.installments || 0);
+    if (!form.title.trim() || !Number(form.principal) || !installments || !Number(form.monthlyPayment) || !form.accountId) return;
+    if (!isEligibleAccount(form.accountId)) { alert("«از حساب» باید از بین حساب‌های بانکی یا حساب‌های دوطرفه انتخاب شود."); return; }
+    setLoans((p) => [...p, {
+      id: uid(), title: form.title.trim(), principal: Number(form.principal), installments,
+      monthlyPayment: Number(form.monthlyPayment), startDate: form.startDate, paidCount: 0,
+      spent: !!form.spent, accountId: form.accountId,
+    }]);
+    resetForm();
+  }
+
+  function openEdit(l) {
+    setEditingId(l.id);
+    setEditForm({ title: l.title || "", principal: String(l.principal || ""), installments: String(l.installments || ""), monthlyPayment: String(l.monthlyPayment || ""), startDate: l.startDate || todayISO(), spent: !!l.spent, accountId: l.accountId || "" });
+  }
+
+  function saveEdit(l) {
+    if (!editForm) return;
+    const installments = Number(editForm.installments || 0);
+    const principal = Number(editForm.principal || 0);
+    const monthlyPayment = Number(editForm.monthlyPayment || 0);
+    if (!editForm.title.trim() || !principal || !installments || !monthlyPayment || !editForm.accountId) return;
+    if (installments < Number(l.paidCount || 0)) { alert(`تعداد اقساط نمی‌تواند کمتر از اقساط پرداخت‌شده (${toFaInt(l.paidCount || 0)}) باشد.`); return; }
+    if (!isEligibleAccount(editForm.accountId)) { alert("«از حساب» باید از بین حساب‌های بانکی یا حساب‌های دوطرفه انتخاب شود."); return; }
+    setLoans((p) => p.map((x) => x.id === l.id ? {
+      ...x, title: editForm.title.trim(), principal, installments, monthlyPayment,
+      startDate: editForm.startDate, spent: !!editForm.spent, accountId: editForm.accountId,
+    } : x));
+    setEditingId(null); setEditForm(null);
+  }
+
+  function undoLastPayment(l) {
+    if (!Number(l.paidCount)) return;
+    if (!window.confirm("آخرین پرداخت قسط اصلاح شود و یک قسط از تعداد پرداخت‌شده کم شود؟")) return;
+    setLoans((p) => p.map((x) => x.id === l.id ? { ...x, paidCount: Math.max(0, Number(x.paidCount || 0) - 1) } : x));
+  }
+
+  const renderAccountPicker = (value, onChange, open, setOpen) => (
+    open && toBody(<div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.4)", zIndex: 760, display: "flex", alignItems: "flex-end", justifyContent: "center", maxWidth: 480, margin: "0 auto", fontFamily: FONT, direction: "rtl" }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: t.bg || t.card, width: "100%", maxHeight: "76vh", overflowY: "auto", borderRadius: "18px 18px 0 0", padding: "16px 14px calc(18px + env(safe-area-inset-bottom, 0px))" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+          <button type="button" onClick={() => setOpen(false)} style={{ border: 0, background: "transparent", color: t.sub, padding: 5 }}><X size={21} /></button>
+          <div style={{ fontWeight: 800, fontSize: 15 }}>از حساب</div><span style={{ width: 31 }} />
+        </div>
+        <div style={{ fontSize: 11.5, color: t.sub, lineHeight: 1.8, marginBottom: 8 }}>
+          همه حساب‌ها نمایش داده می‌شوند؛ حساب‌های «بانک» و حساب‌های دارای تیک «دو طرفه» قابل انتخاب هستند.
+        </div>
+        {!allAccounts.length && <EmptyRow text="حسابی تعریف نشده" />}
+        {allAccounts.map((a) => {
+          const canPick = a.kind === "bank" || a.twoWay === true;
+          const on = a.id === value;
+          return <button key={a.id} type="button" disabled={!canPick} onClick={() => { onChange(a.id); setOpen(false); }} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "12px 6px", border: 0, borderBottom: `1px solid ${t.border}`, background: "transparent", cursor: canPick ? "pointer" : "not-allowed", fontFamily: "inherit", color: canPick ? t.text : t.sub, textAlign: "right", opacity: canPick ? 1 : .55 }}>
+            <span style={{ width: 20, height: 20, borderRadius: "50%", border: `2px solid ${on ? BRAND.header : t.sub}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{on && <span style={{ width: 10, height: 10, borderRadius: "50%", background: BRAND.header }} />}</span>
+            <span style={{ flex: 1, fontSize: 13.5, fontWeight: on ? 800 : 600 }}>{accountPath(categories, a).join(" / ")}</span>
+            <span style={{ fontSize: 10.5, color: canPick ? BRAND.darkgreen : t.sub, fontWeight: 700 }}>{canPick ? "قابل انتخاب" : "غیرفعال"}</span>
+          </button>;
+        })}
+      </div>
+    </div>)
+  );
+
+  const accountField = (value, setOpen) => <button type="button" onClick={() => setOpen(true)} style={{ width: "100%", minHeight: 46, marginBottom: 8, padding: "9px 12px", borderRadius: 10, border: `1.5px solid ${t.inputBorder}`, background: t.input, color: value ? t.text : t.sub, display: "flex", alignItems: "center", justifyContent: "space-between", fontFamily: "inherit", cursor: "pointer", textAlign: "right" }}>
+    <span style={{ fontSize: 13.5, fontWeight: value ? 700 : 500 }}>{value ? accountName(value) : "انتخاب از حساب"}</span><ChevronLeft size={17} style={{ transform: "rotate(90deg)", flexShrink: 0 }} />
+  </button>;
+
   return (
     <div>
       <div style={{ ...st.card, padding: 14, marginBottom: 16 }}>
         <div style={{ fontWeight: 700, marginBottom: 10, fontSize: 14 }}>ثبت وام جدید</div>
         <input placeholder="عنوان وام (مثلا وام خودرو)" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} style={st.input} />
+        {accountField(form.accountId, setAccountOpen)}
         <AmountInput placeholder="مبلغ اصل وام" value={form.principal} onChange={(v) => setForm({ ...form, principal: v })} style={st.input} />
         <KeypadInput kind="digits" placeholder="تعداد اقساط" value={form.installments} onChange={(e) => setForm({ ...form, installments: e.target.value.replace(/[^0-9]/g, "") })} style={st.input} inputMode="numeric" />
         <AmountInput placeholder="مبلغ هر قسط" value={form.monthlyPayment} onChange={(v) => setForm({ ...form, monthlyPayment: v })} style={st.input} />
@@ -4268,7 +4351,8 @@ function LoansManager({ loans, setLoans }) {
           <input type="checkbox" checked={!!form.spent} onChange={(e) => setForm({ ...form, spent: e.target.checked })} style={{ width: 20, height: 20, marginTop: 4, flexShrink: 0 }} />
           <span>مبلغ این وام قبلاً دریافت و خرج شده است (وام قدیمی)<br /><span style={{ fontWeight: 500, fontSize: 11.5, color: "#8a8194" }}>در ترازنامه و مانده‌ی دارایی خالص حساب نمی‌شود تا ناترازی ایجاد نکند؛ اقساط و یادآوری‌ها مثل قبل کار می‌کنند.</span></span>
         </label>
-        <button onClick={add} style={st.primaryBtn}>ثبت وام</button>
+        <button onClick={add} disabled={!eligibleAccounts.length} style={{ ...st.primaryBtn, opacity: eligibleAccounts.length ? 1 : .5 }}>ثبت وام</button>
+        {!eligibleAccounts.length && <div style={{ color: BRAND.crimson, fontSize: 11.5, marginTop: 8, lineHeight: 1.8 }}>برای ثبت وام ابتدا در «حساب‌ها» یک حساب از نوع «بانک» بسازید و گزینه «دو طرفه (هم بدهکار هم بستانکار)» را فعال کنید.</div>}
       </div>
       <div style={{ ...st.card, padding: "4px 12px" }}>
         {loans.length === 0 && <EmptyRow text="وامی ثبت نشده" />}
@@ -4277,21 +4361,40 @@ function LoansManager({ loans, setLoans }) {
           const nextDue = addMonths(l.startDate, l.paidCount);
           return (
             <div key={l.id} style={{ padding: "12px 4px", borderBottom: "1px solid #f0eef3" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 6 }}>
                 <span style={{ fontWeight: 700, fontSize: 14 }}>{l.title}{l.spent && <span style={{ marginRight: 8, fontSize: 10.5, fontWeight: 700, padding: "2px 8px", borderRadius: 10, background: "#f1eef4", color: "#6b6377" }}>خرج‌شده</span>}</span>
-                <button onClick={() => setLoans((p) => p.filter((x) => x.id !== l.id))} style={{ background: "none", border: "none", color: BRAND.crimson, cursor: "pointer" }}><Trash2 size={15} /></button>
+                <div style={{ display: "flex", gap: 2 }}>
+                  <button onClick={() => openEdit(l)} title="ویرایش وام و اقساط" style={{ background: "none", border: "none", color: BRAND.violet, cursor: "pointer" }}><Pencil size={15} /></button>
+                  <button onClick={() => { if (window.confirm("این وام حذف شود؟")) setLoans((p) => p.filter((x) => x.id !== l.id)); }} title="حذف وام" style={{ background: "none", border: "none", color: BRAND.crimson, cursor: "pointer" }}><Trash2 size={15} /></button>
+                </div>
               </div>
+              <div style={{ fontSize: 11.5, color: t.sub, marginBottom: 4 }}>از حساب: {accountName(l.accountId)}</div>
               <div style={{ fontSize: 12.5, color: "#8a8194", marginBottom: 4 }}>قسط {toFaInt(l.paidCount)} از {toFaInt(l.installments)} پرداخت شده — سررسید بعدی: {l.paidCount < l.installments ? faLongDate(new Date(nextDue)) : "تسویه شده"}</div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 <span style={{ fontWeight: 700, color: remaining > 0 ? BRAND.crimson : BRAND.darkgreen }}>باقی‌مانده: {toFaInt(Math.max(remaining, 0))} ریال</span>
-                {l.paidCount < l.installments && (
-                  <button onClick={() => setLoans((p) => p.map((x) => x.id === l.id ? { ...x, paidCount: x.paidCount + 1 } : x))} style={{ background: BRAND.green, color: "#fff", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>ثبت پرداخت قسط</button>
-                )}
+                <div style={{ display: "flex", gap: 6 }}>
+                  {l.paidCount > 0 && <button onClick={() => undoLastPayment(l)} style={{ background: "#f1eef4", color: "#5f566b", border: "none", borderRadius: 8, padding: "6px 10px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>اصلاح آخرین قسط</button>}
+                  {l.paidCount < l.installments && <button onClick={() => setLoans((p) => p.map((x) => x.id === l.id ? { ...x, paidCount: x.paidCount + 1 } : x))} style={{ background: BRAND.green, color: "#fff", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>ثبت پرداخت قسط</button>}
+                </div>
               </div>
+              {editingId === l.id && editForm && <div style={{ background: "#f7f4fa", borderRadius: 12, padding: 10, marginTop: 10 }}>
+                <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 8 }}>ویرایش وام / اقساط</div>
+                <input value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} placeholder="عنوان وام" style={{ ...st.input, marginBottom: 7 }} />
+                {accountField(editForm.accountId, setEditAccountOpen)}
+                <AmountInput value={editForm.principal} onChange={(v) => setEditForm({ ...editForm, principal: v })} placeholder="مبلغ اصل وام" style={{ ...st.input, marginBottom: 7 }} />
+                <KeypadInput kind="digits" value={editForm.installments} onChange={(e) => setEditForm({ ...editForm, installments: e.target.value.replace(/[^0-9]/g, "") })} placeholder="تعداد اقساط" style={{ ...st.input, marginBottom: 7 }} inputMode="numeric" />
+                <AmountInput value={editForm.monthlyPayment} onChange={(v) => setEditForm({ ...editForm, monthlyPayment: v })} placeholder="مبلغ هر قسط" style={{ ...st.input, marginBottom: 7 }} />
+                <label style={st.label}>تاریخ شروع</label>
+                <JalaliDateInput value={editForm.startDate} onChange={(v) => setEditForm({ ...editForm, startDate: v })} style={{ ...st.input, marginBottom: 7 }} />
+                <label style={{ display: "flex", alignItems: "center", gap: 8, margin: "4px 0 10px", fontSize: 12.5, fontWeight: 700 }}><input type="checkbox" checked={!!editForm.spent} onChange={(e) => setEditForm({ ...editForm, spent: e.target.checked })} style={{ width: 18, height: 18 }} /> وام قدیمی/خرج‌شده</label>
+                <div style={{ display: "flex", gap: 8 }}><button onClick={() => saveEdit(l)} style={{ ...st.primaryBtn, flex: 1, marginTop: 0 }}>ذخیره اصلاحات</button><button onClick={() => { setEditingId(null); setEditForm(null); }} style={{ ...st.primaryBtn, flex: 1, marginTop: 0, background: "#eee", color: "#333" }}>انصراف</button></div>
+              </div>}
             </div>
           );
         })}
       </div>
+      {renderAccountPicker(form.accountId, (id) => setForm((f) => ({ ...f, accountId: id })), accountOpen, setAccountOpen)}
+      {editForm && renderAccountPicker(editForm.accountId, (id) => setEditForm((f) => ({ ...f, accountId: id })), editAccountOpen, setEditAccountOpen)}
     </div>
   );
 }
@@ -5764,4 +5867,4 @@ function SideMenu({ onClose, setSubView, profileName }) {
     {title:"تنظیمات و برنامه",items:[["ویرایش اطلاعات کاربری","profile"],["پشتیبان‌گیری","backup"],["همگام‌سازی ابری (گیت‌هاب)","cloud"],["مدیریت دسترسی","access"],["تنظیمات پایه","basic"],["تنظیمات و امنیت","settings"],["آموزش","tutorial"],["ارسال برنامه به دیگران","share"],["امتیاز به برنامه","rate"],["درباره","about"]]}
   ];
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.42)",zIndex:310,maxWidth:480,margin:"0 auto"}} onClick={onClose}><div onClick={e=>e.stopPropagation()} style={{position:"absolute",top:0,bottom:0,left:0,width:"86%",maxWidth:390,background:"#fff",boxShadow:"3px 0 18px rgba(0,0,0,.22)",overflowY:"auto",paddingTop:"env(safe-area-inset-top,0px)",paddingBottom:"calc(28px + env(safe-area-inset-bottom,0px))"}}><div style={{background:BRAND.header,color:"#fff",padding:"16px",position:"sticky",top:0,zIndex:2}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}><div style={{display:"flex",alignItems:"center",gap:10}}><RexaLogo size={42}/><div><div style={{fontWeight:800,fontSize:15}}>{profileName||"کاربر Rexa"}</div><div style={{fontSize:11,color:"#d8c9e8",marginTop:3}}>Rexa · نسخه ۵.۱.۲</div></div></div><button onClick={onClose} style={{background:"rgba(255,255,255,.12)",border:0,borderRadius:9,color:"#fff",width:36,height:36}}><X size={21}/></button></div></div><div style={{padding:"8px 14px 0"}}>{sections.map(sec=><div key={sec.title}><div style={{fontSize:11,fontWeight:800,color:BRAND.violet,padding:"13px 6px 7px"}}>{sec.title}</div><div style={{border:"1px solid #eeeaf2",borderRadius:12,overflow:"hidden",marginBottom:6}}>{sec.items.map(([label,key],i)=><div key={key} onClick={()=>setSubView(key)} style={{padding:"12px 10px",borderBottom:i===sec.items.length-1?"none":"1px solid #f0eef3",fontSize:13.5,fontWeight:600,color:"#241a30",background:"#fff"}}>{label}</div>)}</div></div>)}<div style={{textAlign:"center",color:"#918899",fontSize:10.5,padding:"14px 0 10px"}}>Rexa Personal Finance · نسخه ۵.۱.۲ · Android</div></div></div></div>;
-}
+       }
