@@ -1205,15 +1205,34 @@ function syncErrorText(e) {
   if (/network|failed to fetch|timeout|load failed/i.test(m)) return "اتصال اینترنت برقرار نیست.";
   return `خطا: ${m.slice(0, 120)}`;
 }
+let _updErr = "";
+async function rawGet(url, accept) {
+  if (Capacitor.isNativePlatform()) { const r = await CapacitorHttp.get({ url, headers: { Accept: accept, "Cache-Control": "no-cache" }, connectTimeout: 8000, readTimeout: 12000 }); return { status: r.status, data: r.data, url: r.url }; }
+  const r = await fetch(url, { headers: { Accept: accept } }); return { status: r.status, data: accept.includes("json") ? await r.json().catch(() => ({})) : null, url: r.url };
+}
+// آخرین نسخه‌ی منتشرشده: اول API گیت‌هاب، اگر نشد خود صفحه‌ی releases/latest (بدون محدودیت API)
 async function checkLatestRelease(repo) {
-  const url = `https://api.github.com/repos/${repo}/releases/latest`;
-  let status, data;
-  if (Capacitor.isNativePlatform()) { const r = await CapacitorHttp.get({ url, headers: { Accept: "application/vnd.github+json" }, connectTimeout: 8000, readTimeout: 12000 }); status = r.status; data = r.data; }
-  else { const r = await fetch(url, { headers: { Accept: "application/vnd.github+json" } }); status = r.status; data = await r.json().catch(() => ({})); }
-  if (status !== 200 || !data) return null;
-  const n = Number(String(data.tag_name || "").replace(/\D/g, ""));
-  const apk = (data.assets || []).find((a) => /\.apk$/i.test(a.name));
-  return { build: n, name: data.name || data.tag_name, url: apk?.browser_download_url || data.html_url, page: data.html_url };
+  _updErr = "";
+  try {
+    const r = await rawGet(`https://api.github.com/repos/${repo}/releases/latest?t=${Date.now()}`, "application/vnd.github+json");
+    const data = typeof r.data === "string" ? JSON.parse(r.data) : r.data;
+    if (r.status === 200 && data) {
+      const n = Number(String(data.tag_name || "").replace(/\D/g, ""));
+      const apk = (data.assets || []).find((x) => /\.apk$/i.test(x.name));
+      return { build: n, name: data.name || data.tag_name, url: apk?.browser_download_url || data.html_url, page: data.html_url };
+    }
+    _updErr = `API ${r.status}`;
+  } catch (e) { _updErr = `API ${e?.message || e}`; }
+  try {
+    const r = await rawGet(`https://github.com/${repo}/releases/latest`, "text/html");
+    const m = String(r.url || "").match(/\/releases\/tag\/([^/?#]+)/);
+    if (r.status === 200 && m) {
+      const tag = decodeURIComponent(m[1]); const n = Number(tag.replace(/\D/g, ""));
+      return { build: n, name: `Rexa build ${n}`, url: `https://github.com/${repo}/releases/download/${tag}/Rexa-build-${n}.apk`, page: `https://github.com/${repo}/releases/tag/${tag}` };
+    }
+    _updErr += ` | صفحه ${r.status}`;
+  } catch (e) { _updErr += ` | صفحه ${e?.message || e}`; }
+  return null;
 }
 
 const SYNC_DEBOUNCE_MS = 20000;
@@ -2350,14 +2369,17 @@ export default function App() {
     try {
       const r = await checkLatestRelease(APP_REPO);
       try { localStorage.setItem("rexa:updChk", String(Date.now())); } catch {}
-      if (r && r.build > Number(APP_BUILD)) { setUpdateInfo(r); setUpdateMsg(""); }
-      else { setUpdateInfo(null); if (manual) setUpdateMsg(r ? "شما آخرین نسخه را دارید." : "بررسی انجام نشد (اینترنت یا دسترسی به ریپو)."); }
+      if (r && r.build > Number(APP_BUILD)) { setUpdateInfo(r); setUpdateMsg(manual ? `نسخه‌ی جدید ${r.name} آماده است.` : ""); }
+      else { setUpdateInfo(null); if (manual) setUpdateMsg(r ? `شما آخرین نسخه را دارید (نسخه‌ی شما ${toFaInt(APP_BUILD)}، آخرین منتشرشده ${toFaInt(r.build)}).` : `بررسی انجام نشد (${_updErr || "اینترنت یا دسترسی به ریپو"}).`); }
     } catch { if (manual) setUpdateMsg("بررسی انجام نشد (اینترنت قطع است)."); }
   }
   useEffect(() => {
     if (!loaded || !Capacitor.isNativePlatform()) return;
-    let last = 0; try { last = Number(localStorage.getItem("rexa:updChk") || 0); } catch {}
-    if (Date.now() - last > 6 * 3600 * 1000) checkUpdateNow(false);
+    // هر بار برنامه باز شود یا از پس‌زمینه برگردد (حداکثر هر ۱۰ دقیقه) نسخه‌ی جدید بررسی می‌شود
+    const run = () => { let last = 0; try { last = Number(localStorage.getItem("rexa:updChk") || 0); } catch {} if (Date.now() - last > 10 * 60 * 1000) checkUpdateNow(false); };
+    run();
+    let h; CapacitorApp.addListener("appStateChange", (st) => { if (st.isActive) run(); }).then((x) => { h = x; }).catch(() => {});
+    return () => { try { h?.remove(); } catch {} };
   }, [loaded]);
   function exportExcel() {
     const typeFa = (t) => (t.type === "expense" ? "پرداخت" : t.type === "income" ? "دریافت" : "انتقال");
