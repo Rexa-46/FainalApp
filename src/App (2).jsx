@@ -1077,7 +1077,7 @@ function BottomNav({ active, setActive, onAdd, hidden = false }) {
   ];
   if (hidden) return null;
   return (
-    <div dir="ltr" style={{ position: "fixed", left: 0, right: 0, bottom: 0, maxWidth: 480, margin: "0 auto", zIndex: 300, background: `linear-gradient(to top, ${t.bg} 80%, transparent)`, border: "none", boxShadow: "none", transform: kbShift ? `translateY(${kbShift}px)` : "none", pointerEvents: kbShift ? "none" : "auto", display: "grid", gridTemplateColumns: "repeat(5, 1fr)", alignItems: "end", padding: "18px calc(4px + env(safe-area-inset-right, 0px)) calc(6px + env(safe-area-inset-bottom, 0px)) calc(4px + env(safe-area-inset-left, 0px))" }}>
+    <div dir="ltr" style={{ position: "fixed", left: 0, right: 0, bottom: 0, maxWidth: 480, margin: "0 auto", zIndex: 300, background: "transparent", border: "none", boxShadow: "none", transform: kbShift ? `translateY(${kbShift}px)` : "none", pointerEvents: "none", display: "grid", gridTemplateColumns: "repeat(5, 1fr)", alignItems: "end", padding: "18px calc(4px + env(safe-area-inset-right, 0px)) calc(6px + env(safe-area-inset-bottom, 0px)) calc(4px + env(safe-area-inset-left, 0px))" }}>
       <svg width="0" height="0" style={{ position: "absolute" }} aria-hidden="true">
         <defs>
           {Object.entries(NAV3D).map(([k, c]) => (
@@ -1099,7 +1099,7 @@ const NAV3D = {
   checks: { c1: "#ffd77a", c2: "#f59e0b", side: "#98590a" },
   home: { c1: "#7ee8c0", c2: "#059669", side: "#065f46" },
 };
-const NAV_BTN_RESET = { background: "none", border: "none", outline: "none", boxShadow: "none", WebkitTapHighlightColor: "transparent", appearance: "none", WebkitAppearance: "none", padding: 0, margin: 0, height: 66, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", gap: 2, cursor: "pointer", fontFamily: "inherit", userSelect: "none" };
+const NAV_BTN_RESET = { background: "none", border: "none", outline: "none", boxShadow: "none", WebkitTapHighlightColor: "transparent", appearance: "none", WebkitAppearance: "none", padding: 0, margin: 0, height: 66, pointerEvents: "auto", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", gap: 2, cursor: "pointer", fontFamily: "inherit", userSelect: "none" };
 function NavBtn({ it, isActive, onClick, dark }) {
   const Icon = it.icon; const c = NAV3D[it.key];
   const big = it.key === "__add";
@@ -1115,7 +1115,7 @@ function NavBtn({ it, isActive, onClick, dark }) {
         ))}
         <Icon {...common} color={g} stroke={g} fill={g} fillOpacity={0.32} style={{ position: "absolute", left: 0, top: 0 }} />
       </span>
-      <span style={{ fontSize: 11, fontWeight: isActive ? 800 : 600, marginTop: 2, color: isActive ? c.c2 : (dark ? "#b7c0d6" : "#5b6785") }}>{it.label}</span>
+      <span style={{ fontSize: 11, fontWeight: isActive ? 800 : 600, marginTop: 2, color: isActive ? c.c2 : (dark ? "#b7c0d6" : "#5b6785"), textShadow: dark ? "0 0 5px rgba(0,0,0,.9)" : "0 0 5px rgba(255,255,255,.95), 0 0 9px rgba(255,255,255,.8)" }}>{it.label}</span>
     </button>
   );
 }
